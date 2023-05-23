@@ -1,0 +1,8 @@
+<launch>
+    <!-- Spawn teeterbot -->
+    <include file="$(find teeterbot_gazebo)/launch/teeterbot_empty_world.launch"/>
+    <!-- Observation node -->
+    <node name="data_processor" pkg="advctrl_balancing_robot" type="data_processor.py" output="screen"/>
+    <!-- rviz vizualization -->
+    <include file="$(find advctrl_balancing_robot)/launch/rviz.launch"/>
+</launch>

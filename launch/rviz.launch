@@ -1,0 +1,3 @@
+<launch> 
+    <node name="rviz_visualization" pkg="rviz" type="rviz" output="screen" args="-d $(find advctrl_balancing_robot)/rviz/config.rviz"/>
+</launch>

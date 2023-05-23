@@ -1,0 +1,4 @@
+<launch>
+    <include file="$(find advctrl_balancing_robot)/launch/spawn_robot.launch"/>
+    <node name="lqr_controller" pkg="advctrl_balancing_robot" type="lqr_controller.py" output="screen"/>
+</launch>
