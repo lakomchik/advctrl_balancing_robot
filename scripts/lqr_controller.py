@@ -24,53 +24,66 @@ class LQRController():
         self.cmd_vel_sub = rospy.Subscriber(
             '/cmd_vel/', Twist, self.cmd_vel_callback, queue_size=1)
         # torgue limit
-        self.T_max = 5.2
+        self.T_max = 10.2
         self.K = self.lqr_coeffs()
         self.T1_control = Float64()
         self.T2_control = Float64()
         self.ref_state = np.zeros(6)  # holds reference system states
         self.current_state = np.zeros(6)
-        self.K = self.lqr_coeffs()
+        self.K_1, self.K_2 = self.lqr_coeffs_v2()
         pass
 
     def lqr_coeffs(self):
-        """Calculates lqr cofficents by solving ARE 
 
-        Returns:
-            K gains
-        """
-        A = np.zeros([4, 4], dtype=float)
-        B = np.zeros([4, 1], dtype=float)
-        # System parameters
-        mb = 10.
-        Jb = 1.40833
-        r = 0.2
+        d = 0.5
         l = 0.4
-        mw = 1.
-        Jw = 0.02
+        r = 0.2
+        m_b = 10
+        m_w = 1
+        J = 1.40833
         g = 9.81
-        # Constants for linearized A and B
-        den1 = mb + 2*(1/pow(r, 2)*Jw + mw) - \
-            pow(mb * l, 2)/(Jb + mb * pow(l, 2))
-        C1 = (pow((mb * l), 2) * g / (Jb + mb * pow(l, 2)))/den1
-        C2 = (2/r + 2*mb*l/(Jb + mb * pow(l, 2)))/den1
-        den2 = Jb + mb*pow(l, 2) - pow(mb*l, 2) / \
-            (mb + 2 * (1/pow(r, 2) * Jw + mw))
-        C3 = mb * g * l / den2
-        C4 = (2 * mb * l/(mb*r + 2 * (Jw/r + mw * r))+2)/den2
-        A[0, 1] = 1
-        A[1, 2] = - C1
-        A[2, 3] = 1
-        A[3, 2] = C3
-        B[1, 0] = C2
-        B[3, 0] = -C4
+        K = 0.051
+        I_2 = 0.60833
+        I_1 = 0.60833
+        I_3 = 0.15
+        Dipl_1 = (m_b + 3 * m_w) * (m_b * d ** 2 + I_3) - (m_b * d) ** 2
+        Dipl_2 = I_2 + (5 * l**2 + r**2 / 2) * m_w
+        A23 = (-m_b * d)**2 * g/(Dipl_1)
+        A43 = (m_b + 3*m_w) * m_b * d * g/Dipl_1
+        B21 = (m_b * d ** 2 + I_3)/(Dipl_1 * r)
+        B41 = -m_b * d/(Dipl_1 * r)
+        B61 = l/(Dipl_2 * r)
+        A = np.array([
+            [0, 1, 0, 0],
+            [0, 0, A23, 0],
+            [0, 0, 0, 1],
+            [0, 0, A43, 0],
+        ])
+        B = np.array([
+            [0],
+            [B21],
+            [0],
+            [B41]
+        ])
+        # solving first system
         R = np.diag([0.01])
         Q = np.diag([0., 0.5, 5.5, .4])
         P = scipy.linalg.solve_continuous_are(A, B, Q, R)
         R_inv = scipy.linalg.inv(R)
         K = np.dot(R_inv, np.dot(B.transpose(), P))
-        print(scipy.linalg.eigvals(A - np.dot(B, K)))
-        return K
+        # print(scipy.linalg.eigvals(A - np.dot(B, K)))
+        A_2 = np.array([[0, 1],
+                        [0, 0]])
+        B_2 = np.array([[0],
+                        [B61]])
+        R_2 = np.diag([0.01])
+        Q_2 = np.diag([0., 1.5])
+        P_2 = scipy.linalg.solve_continuous_are(A_2, B_2, Q_2, R_2)
+        R_inv_2 = scipy.linalg.inv(R_2)
+        K_2 = np.dot(R_inv_2, np.dot(B_2.transpose(), P_2))
+        # print(K, K_2)
+        return K, K_2
+        # pass
 
     def observation_callback(self, msg):
         self.current_state[0] = msg.x
@@ -81,16 +94,24 @@ class LQRController():
         self.current_state[5] = msg.psi_dot
 
     def calculate_action(self):
-        torgue = np.dot(
-            self.K, (self.ref_state[:4]-self.current_state[:4]).reshape(-1, 1))
-        torgue = -torgue[0, 0]
-        if (fabs(torgue) > self.T_max):
-            torgue = self.T_max * np.sign(torgue)
+        torgue_theta = np.dot(
+            self.K_1, (self.ref_state[:4]-self.current_state[:4]).reshape(-1, 1))
+        torgue_theta = -torgue_theta[0, 0]
+        torgue_psi = np.dot(
+            self.K_2, (self.ref_state[4:] -
+                       self.current_state[4:]).reshape(-1, 1)
+        )
+        torgue_psi = torgue_psi[0, 0]
+        left_torgue = 0.5 * torgue_theta + 0.5 * torgue_psi
+        right_torgue = 0.5 * torgue_theta - 0.5 * torgue_psi
 
+        if (fabs(right_torgue) > self.T_max):
+            right_torgue = self.T_max * np.sign(right_torgue)
+        if (fabs(left_torgue) > self.T_max):
+            left_torgue = self.T_max * np.sign(left_torgue)
         # very dummy solution, but it works, IDC!!!
-        delta = self.ref_state[5] / 1
-        self.T1_control.data = torgue + delta
-        self.T2_control.data = torgue - delta
+        self.T1_control.data = left_torgue
+        self.T2_control.data = right_torgue
         self.T1_pub.publish(self.T1_control)
         self.T2_pub.publish(self.T2_control)
 
