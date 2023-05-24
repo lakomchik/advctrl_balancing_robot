@@ -30,7 +30,7 @@ class LQRController():
         self.T2_control = Float64()
         self.ref_state = np.zeros(6)  # holds reference system states
         self.current_state = np.zeros(6)
-        self.K_1, self.K_2 = self.lqr_coeffs_v2()
+        self.K_1, self.K_2 = self.lqr_coeffs()
         pass
 
     def lqr_coeffs(self):
@@ -116,8 +116,8 @@ class LQRController():
         self.T2_pub.publish(self.T2_control)
 
     def cmd_vel_callback(self, msg):
-        self.ref_state[1] = msg.linear.x/3
-        self.ref_state[5] = msg.angular.z/2
+        self.ref_state[1] = msg.linear.x
+        self.ref_state[5] = msg.angular.z
 
         pass
 
