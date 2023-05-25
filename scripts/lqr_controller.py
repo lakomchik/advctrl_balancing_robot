@@ -23,6 +23,18 @@ class LQRController():
             '/observation/', Observation, self.observation_callback, queue_size=1)
         self.cmd_vel_sub = rospy.Subscriber(
             '/cmd_vel/', Twist, self.cmd_vel_callback, queue_size=1)
+        self.ref_x_dot_pub = rospy.Publisher(
+            '/ref_x_dot', Float64, queue_size=1)
+        self.ref_psi_dot_pub = rospy.Publisher(
+            '/ref_psi_dot', Float64, queue_size=1)
+        self.cur_x_dot_pub = rospy.Publisher(
+            '/cur_x_dot', Float64, queue_size=1)
+        self.cur_psi_dot_pub = rospy.Publisher(
+            '/cur_psi_dot', Float64, queue_size=1)
+        self.cur_theta_pub = rospy.Publisher(
+            '/cur_theta', Float64, queue_size=1)
+        self.cur_theta_dot_pub = rospy.Publisher(
+            '/cur_theta_dot', Float64, queue_size=1)
         # torgue limit
         self.T_max = 10.2
         self.K = self.lqr_coeffs()
@@ -123,7 +135,12 @@ class LQRController():
         rate = rospy.Rate(100)
         while not rospy.is_shutdown():
             self.calculate_action()
-
+            self.ref_x_dot_pub.publish(Float64(self.ref_state[1]))
+            self.cur_x_dot_pub.publish(Float64(self.current_state[1]))
+            self.ref_psi_dot_pub.publish(Float64(self.ref_state[5]))
+            self.cur_psi_dot_pub.publish(Float64(self.current_state[5]))
+            self.cur_theta_pub.publish(Float64(self.current_state[2]))
+            self.cur_theta_dot_pub.publish(Float64(self.current_state[3]))
             rate.sleep()
 
 
